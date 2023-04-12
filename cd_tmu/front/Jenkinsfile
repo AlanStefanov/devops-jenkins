@@ -1,0 +1,29 @@
+// AStefanov
+node {
+    stage('Scm Checkout'){
+        git credentialsId: 'git-rafam', url: 'https://www.git.rafam.ec.gba.gov.ar/rafam-2/rafam_tablero_front.git'
+        sh "git checkout master"
+
+    }
+    stage ('Env settings'){
+        sh 'cp .env.example .env'
+    }
+    stage ('Build Docker Image') {
+        sh 'docker build -t rafam_tablero_front .'
+    }
+        stage ('Remove old Docker Image') {
+            sh ''' echo "Removiendo antiguos contenedores"
+            docker rm rafam_tablero_front_ituzaingo -f
+            docker rm rafam_tablero_front_quilmes -f
+            docker rm rafam_tablero_front_provincial -f
+            '''
+    }    
+    stage('Run  Docker Container'){
+        sh ''' echo "Corriendo nuevos contenedores"
+        docker run -dp 5701:80 --name rafam_tablero_front_ituzaingo --env-file ./.env.ituzaingo rafam_tablero_front
+        docker run -dp 5601:80 --name rafam_tablero_front_quilmes --env-file ./.env.quilmes rafam_tablero_front
+        docker run -dp 5501:80 --name rafam_tablero_front_provincial --env-file ./.env rafam_tablero_front
+
+        '''
+    }
+}
