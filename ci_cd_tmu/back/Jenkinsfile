@@ -2,42 +2,65 @@ pipeline {
     agent any
 
     stages {
-        stage('Checkout') {
+        stage('SCM Checkout - Clonar repositorio de Docker') {
             steps {
                 checkout([$class: 'GitSCM',
-                          branches: [[name: '*/tags/*']], // Detectar tags
-                        doGenerateSubmoduleConfigurations: false,
+                          branches: [[name: '*/tags/*']],
+                          doGenerateSubmoduleConfigurations: false,
                           extensions: [[$class: 'CloneOption', noTags: false, reference: '', shallow: false, timeout: 60]],
                           submoduleCfg: [],
                           userRemoteConfigs: [[credentialsId: 'git-rafam', url: 'https://www.git.rafam.ec.gba.gov.ar/rafam-2/rafam_tablero_api']]])
             }
         }
 
-        stage('Build') {
+        stage('Build - Construir imagen Docker') {
             steps {
                 // Obtener el último tag liberado
-                def lastTag = sh(script: 'git describe --tags --abbrev=0', returnStdout: true).trim()
-
-                // Construir la imagen Docker con el tag obtenido
-                sh "docker build -t rafam_tablero_api:${lastTag} ."
+                script {
+                    def lastTag = sh(script: 'git describe --tags --abbrev=0', returnStdout: true).trim()
+                    // Construir la imagen Docker con el tag obtenido
+                    sh "docker build -t rafam_tablero_front:${lastTag} ."
+                }
             }
         }
 
-        stage('Test') {
+        stage('Test - PyTest') {
             steps {
-                // Aquí puedes agregar los pasos para ejecutar tus pruebas
+                // Copiar el archivo .env al directorio de trabajo
+                sh "cp /home/tmu/ci_cd/env/.env.back .env"
+                // Cargar las variables de entorno del archivo .env
+                sh 'source .env.back'
+                // Ejecutar las pruebas con pytest
+                sh 'pytest'
             }
         }
 
-        stage('Deploy') {
+        stage('Subir imagen Docker a Registry') {
             steps {
                 // Iniciar sesión en el registro de Docker
                 sh 'docker login www.registry-tableros.rafam.ec.gba.gov.ar -u <USUARIO> -p <CONTRASEÑA>'
 
                 // Subir la imagen Docker con el tag obtenido
-                sh "docker push rafam_tablero_front:${lastTag}"
+                script {
+                    def lastTag = sh(script: 'git describe --tags --abbrev=0', returnStdout: true).trim()
+                    sh "docker push rafam_tablero_front:${lastTag}"
+                }
+            }
+        }
 
-                // Aquí puedes agregar los comandos para ejecutar tu aplicación con la nueva imagen
+        stage('Deploy - Desplegar imagen Docker') {
+            steps {
+                // Obtener el último tag liberado
+                script {
+                    def lastTag = sh(script: 'git describe --tags --abbrev=0', returnStdout: true).trim()
+                    // Detener y eliminar el contenedor existente (si lo hay)
+                    sh "docker stop rafam_tablero_front || true"
+                    sh "docker rm rafam_tablero_front || true"
+                    // Descargar la última imagen Docker desde la registry
+                    sh "docker pull rafam_tablero_front:${lastTag}"
+                    // Iniciar un nuevo contenedor con la nueva imagen
+                    sh "docker run -d -p 5000:3333 --env-file /home/tmu/ci_cd/env/.env.back --name rafam_tablero_front rafam_tablero_front:${lastTag}"
+                }
             }
         }
     }
