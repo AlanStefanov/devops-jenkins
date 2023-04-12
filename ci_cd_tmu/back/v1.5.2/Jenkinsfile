@@ -1,0 +1,60 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Clonar repositorio') {
+            steps {
+                // Clonar el repositorio
+                checkout([$class: 'GitSCM', 
+                        branches: [[name: 'v1.5.2.1-dev']], 
+                        doGenerateSubmoduleConfigurations: false, 
+                        extensions: [], 
+                        submoduleCfg: [], 
+                        userRemoteConfigs: [[credentialsId: 'git-rafam', url: 'https://www.git.rafam.ec.gba.gov.ar/rafam-2/rafam_tablero_api.git']]])
+            }
+        }
+
+        stage('Construir imagen Docker') {
+            steps {
+                // Construir la imagen Docker
+                sh 'docker build -t rafam_tablero_api:v1.5.2.1-dev .'
+            }
+        }
+
+        stage('Iniciar sesión en la registry') {
+            steps {
+                // Iniciar sesión en la registry
+                withCredentials([usernamePassword(credentialsId: 'registry-credentials', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                    sh 'docker login www.registry.rafam.ec.gba.gov.ar -u $USERNAME -p $PASSWORD'
+                }
+            }
+        }
+
+        stage('Etiquetar imagen Docker') {
+            steps {
+                // Etiquetar la imagen Docker
+                sh 'docker tag rafam_tablero_api:v1.5.2.1-dev www.registry.rafam.ec.gba.gov.ar/rafam_tablero_api:v1.5.2.1-dev'
+            }
+        }
+
+        stage('Subir imagen Docker a la registry') {
+            steps {
+                // Subir la imagen Docker a la registry
+                sh 'docker push www.registry.rafam.ec.gba.gov.ar/rafam_tablero_api:v1.5.2.1-dev'
+            }
+        }
+
+        stage('Desplegar imagen Docker en servidor') {
+            steps {
+                // Pull de la imagen Docker en el servidor
+                sh "docker pull www.registry.rafam.ec.gba.gov.ar/rafam_tablero_api:v1.5.2.1-dev"
+
+                // Detener y eliminar contenedores existentes
+                sh "docker stop rafam_tablero_api_ci_cd || true && docker rm rafam_tablero_api_ci_cd || true"
+
+                // Ejecutar contenedor con la nueva imagen
+                sh "docker run -it -dp 5000:3333 --env-file /home/tmu/ci_cd/env/.env.back --name rafam_tablero_api rafam_tablero_api"
+            }
+        }
+    }
+}

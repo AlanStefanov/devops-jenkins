@@ -1,0 +1,44 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout([$class: 'GitSCM',
+                          branches: [[name: '*/tags/*']], // Detectar tags
+                        doGenerateSubmoduleConfigurations: false,
+                          extensions: [[$class: 'CloneOption', noTags: false, reference: '', shallow: false, timeout: 60]],
+                          submoduleCfg: [],
+                          userRemoteConfigs: [[credentialsId: 'git-rafam', url: 'https://www.git.rafam.ec.gba.gov.ar/rafam-2/rafam_tablero_api']]])
+            }
+        }
+
+        stage('Build') {
+            steps {
+                // Obtener el último tag liberado
+                def lastTag = sh(script: 'git describe --tags --abbrev=0', returnStdout: true).trim()
+
+                // Construir la imagen Docker con el tag obtenido
+                sh "docker build -t rafam_tablero_api:${lastTag} ."
+            }
+        }
+
+        stage('Test') {
+            steps {
+                // Aquí puedes agregar los pasos para ejecutar tus pruebas
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                // Iniciar sesión en el registro de Docker
+                sh 'docker login www.registry-tableros.rafam.ec.gba.gov.ar -u <USUARIO> -p <CONTRASEÑA>'
+
+                // Subir la imagen Docker con el tag obtenido
+                sh "docker push rafam_tablero_front:${lastTag}"
+
+                // Aquí puedes agregar los comandos para ejecutar tu aplicación con la nueva imagen
+            }
+        }
+    }
+}
