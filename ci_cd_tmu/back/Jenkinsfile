@@ -17,33 +17,47 @@ pipeline {
             steps {
                 // Obtener el último tag liberado
                 script {
-                    def lastTag = sh(script: 'git describe --tags --abbrev=0', returnStdout: true).trim()
+                    def lastTag = sh(script: 'git describe --tags --abbrev=0 origin/master', returnStdout: true).trim()
                     // Construir la imagen Docker con el tag obtenido
-                    sh "docker build -t rafam_tablero_front:${lastTag} ."
+                    sh "docker build -t rafam_tablero_api:${lastTag} ."
                 }
             }
         }
 
-        stage('Test - PyTest') {
+        stage('Pruebas - Ejecutar PyTest') {
             steps {
-                // Copiar el archivo .env al directorio de trabajo
-                sh "cp /home/tmu/ci_cd/env/.env.back .env"
-                // Cargar las variables de entorno del archivo .env
-                sh 'source .env.back'
-                // Ejecutar las pruebas con pytest
-                sh 'pytest'
+                // Obtener el último tag liberado
+                script {
+                    def lastTag = sh(script: 'git describe --tags --abbrev=0', returnStdout: true).trim()
+                    // Ejecutar pruebas en la imagen Docker construida
+                    sh "docker run rafam_tablero_api:${lastTag} pytest -v"
+                }
+            }
+        }
+        stage('Iniciar sesión en la registry') {
+            steps {
+                // Iniciar sesión en la registry
+                withCredentials([usernamePassword(credentialsId: 'registry-credentials', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                    sh 'docker login www.registry-tableros.rafam.ec.gba.gov.ar -u $USERNAME -p $PASSWORD'
+                }
+            }
+        }
+
+        stage('Etiquetar imagen Docker') {
+            steps {
+                script {
+                    def lastTag = sh(script: 'git describe --tags --abbrev=0', returnStdout: true).trim()
+                    sh "docker tag rafam_tablero_api:${lastTag} www.registry.rafam.ec.gba.gov.ar/rafam_tablero_api:${lastTag}"
+                }
             }
         }
 
         stage('Subir imagen Docker a Registry') {
             steps {
-                // Iniciar sesión en el registro de Docker
-                sh 'docker login www.registry-tableros.rafam.ec.gba.gov.ar -u <USUARIO> -p <CONTRASEÑA>'
-
                 // Subir la imagen Docker con el tag obtenido
                 script {
-                    def lastTag = sh(script: 'git describe --tags --abbrev=0', returnStdout: true).trim()
-                    sh "docker push rafam_tablero_front:${lastTag}"
+                    def lastTag = sh(script: 'git describe --tags --abbrev=0 origin/master', returnStdout: true).trim()
+                    sh "docker push www.registry.rafam.ec.gba.gov.ar/rafam_tablero_api:${lastTag}"
                 }
             }
         }
@@ -54,12 +68,12 @@ pipeline {
                 script {
                     def lastTag = sh(script: 'git describe --tags --abbrev=0', returnStdout: true).trim()
                     // Detener y eliminar el contenedor existente (si lo hay)
-                    sh "docker stop rafam_tablero_front || true"
-                    sh "docker rm rafam_tablero_front || true"
+                    sh "docker stop rafam_tablero_api || true"
+                    sh "docker rm rafam_tablero_api || true"
                     // Descargar la última imagen Docker desde la registry
-                    sh "docker pull rafam_tablero_front:${lastTag}"
+                    sh "docker pull www.registry.rafam.ec.gba.gov.ar/rafam_tablero_api:${lastTag}"
                     // Iniciar un nuevo contenedor con la nueva imagen
-                    sh "docker run -d -p 5000:3333 --env-file /home/tmu/ci_cd/env/.env.back --name rafam_tablero_front rafam_tablero_front:${lastTag}"
+                    sh "docker run -d -p 5000:3333 --env-file /home/tmu/ci_cd/env/.env.back --name rafam_tablero_api rafam_tablero_api:${lastTag}"
                 }
             }
         }
