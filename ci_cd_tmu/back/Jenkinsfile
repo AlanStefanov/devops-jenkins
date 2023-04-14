@@ -2,14 +2,14 @@ pipeline {
     agent any
 
     stages {
-        stage('SCM Checkout - Clonar repositorio de Docker') {
+        stage('SCM Checkout - Clonar repositorio del proyecto') {
             steps {
                 checkout([$class: 'GitSCM',
                           branches: [[name: '*/tags/*']],
                           doGenerateSubmoduleConfigurations: false,
                           extensions: [[$class: 'CloneOption', noTags: false, reference: '', shallow: false, timeout: 60]],
                           submoduleCfg: [],
-                          userRemoteConfigs: [[credentialsId: 'git-rafam', url: 'https://www.git.rafam.ec.gba.gov.ar/rafam-2/rafam_tablero_api']]])
+                          userRemoteConfigs: [[credentialsId: 'git-x', url: 'repo-url']]])
             }
         }
 
@@ -19,7 +19,7 @@ pipeline {
                 script {
                     def lastTag = sh(script: 'git describe --tags --abbrev=0 origin/master', returnStdout: true).trim()
                     // Construir la imagen Docker con el tag obtenido
-                    sh "docker build -t rafam_tablero_api:${lastTag} ."
+                    sh "docker build -t x_api:${lastTag} ."
                 }
             }
         }
@@ -30,7 +30,7 @@ pipeline {
                 script {
                     def lastTag = sh(script: 'git describe --tags --abbrev=0', returnStdout: true).trim()
                     // Ejecutar pruebas en la imagen Docker construida
-                    sh "docker run rafam_tablero_api:${lastTag} pytest -v"
+                    sh "docker run x_api:${lastTag} pytest -v"
                 }
             }
         }
@@ -38,7 +38,7 @@ pipeline {
             steps {
                 // Iniciar sesión en la registry
                 withCredentials([usernamePassword(credentialsId: 'registry-credentials', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                    sh 'docker login www.registry-tableros.rafam.ec.gba.gov.ar -u $USERNAME -p $PASSWORD'
+                    sh 'docker login registry-url -u $USERNAME -p $PASSWORD'
                 }
             }
         }
@@ -47,7 +47,7 @@ pipeline {
             steps {
                 script {
                     def lastTag = sh(script: 'git describe --tags --abbrev=0', returnStdout: true).trim()
-                    sh "docker tag rafam_tablero_api:${lastTag} www.registry.rafam.ec.gba.gov.ar/rafam_tablero_api:${lastTag}"
+                    sh "docker tag x_api:${lastTag} registry-url/x_api:${lastTag}"
                 }
             }
         }
@@ -57,7 +57,7 @@ pipeline {
                 // Subir la imagen Docker con el tag obtenido
                 script {
                     def lastTag = sh(script: 'git describe --tags --abbrev=0 origin/master', returnStdout: true).trim()
-                    sh "docker push www.registry.rafam.ec.gba.gov.ar/rafam_tablero_api:${lastTag}"
+                    sh "docker push registry-url/x_api:${lastTag}"
                 }
             }
         }
@@ -68,12 +68,12 @@ pipeline {
                 script {
                     def lastTag = sh(script: 'git describe --tags --abbrev=0', returnStdout: true).trim()
                     // Detener y eliminar el contenedor existente (si lo hay)
-                    sh "docker stop rafam_tablero_api || true"
-                    sh "docker rm rafam_tablero_api || true"
+                    sh "docker stop x_api || true"
+                    sh "docker rm x_api || true"
                     // Descargar la última imagen Docker desde la registry
-                    sh "docker pull www.registry.rafam.ec.gba.gov.ar/rafam_tablero_api:${lastTag}"
+                    sh "docker pull registry-url/x_api:${lastTag}"
                     // Iniciar un nuevo contenedor con la nueva imagen
-                    sh "docker run -d -p 5000:3333 --env-file /home/tmu/ci_cd/env/.env.back --name rafam_tablero_api rafam_tablero_api:${lastTag}"
+                    sh "docker run -d -p 5000:3333 --env-file /directory/env/.env --name x_api x_api:${lastTag}"
                 }
             }
         }

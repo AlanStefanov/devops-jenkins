@@ -1,7 +1,7 @@
 // AStefanov
 node {
     stage('Scm Checkout'){
-        git credentialsId: 'git-rafam', url: 'https://www.git.rafam.ec.gba.gov.ar/rafam-2/rafam_tablero_front.git'
+        git credentialsId: 'git-x', url: 'repo-ur'
         sh "git checkout master"
 
     }
@@ -9,20 +9,20 @@ node {
         sh 'cp .env.example .env'
     }
     stage ('Build Docker Image') {
-        sh 'docker build -t rafam_tablero_front .'
+        sh 'docker build -t web_app .'
     }
         stage ('Remove old Docker Image') {
             sh ''' echo "Removiendo antiguos contenedores"
-            docker rm rafam_tablero_front_ituzaingo -f
-            docker rm rafam_tablero_front_quilmes -f
-            docker rm rafam_tablero_front_provincial -f
+            docker rm web_app_test -f
+            docker rm web_app_stg -f
+            docker rm web_app_prod -f
             '''
     }    
     stage('Run  Docker Container'){
         sh ''' echo "Corriendo nuevos contenedores"
-        docker run -dp 5701:80 --name rafam_tablero_front_ituzaingo --env-file ./.env.ituzaingo rafam_tablero_front
-        docker run -dp 5601:80 --name rafam_tablero_front_quilmes --env-file ./.env.quilmes rafam_tablero_front
-        docker run -dp 5501:80 --name rafam_tablero_front_provincial --env-file ./.env rafam_tablero_front
+        docker run -dp 5701:80 --name web_app_test --env-file ./.env.test web_app
+        docker run -dp 5601:80 --name web_app_stg --env-file ./.env.stg web_app
+        docker run -dp 5501:80 --name web_app_prod --env-file ./.env.prod web_app
 
         '''
     }
