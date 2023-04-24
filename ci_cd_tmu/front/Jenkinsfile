@@ -2,42 +2,69 @@ pipeline {
     agent any
 
     stages {
-        stage('Checkout') {
+        stage('SCM Checkout - Clonar repositorio del proyecto') {
             steps {
                 checkout([$class: 'GitSCM',
-                          branches: [[name: '*/tags/*']], // Detectar tags
-                        doGenerateSubmoduleConfigurations: false,
-                        extensions: [[$class: 'CloneOption', noTags: false, reference: '', shallow: false, timeout: 60]],
-                        submoduleCfg: [],
-                        userRemoteConfigs: [[credentialsId: 'git-rafam', url: 'https://www.git.rafam.ec.gba.gov.ar/rafam-2/rafam_tablero_front']]])
+                          branches: [[name: '*/tags/*']],
+                          doGenerateSubmoduleConfigurations: false,
+                          extensions: [[$class: 'CloneOption', noTags: false, reference: '', shallow: false, timeout: 60]],
+                          submoduleCfg: [],
+                          userRemoteConfigs: [[credentialsId: 'git-x', url: 'repo-url']]])
             }
         }
 
-        stage('Build') {
+        stage('Build - Construir imagen Docker') {
             steps {
                 // Obtener el último tag liberado
-                def lastTag = sh(script: 'git describe --tags --abbrev=0', returnStdout: true).trim()
-
-                // Construir la imagen Docker con el tag obtenido
-                sh "docker build -t rafam_tablero_front:${lastTag} ."
+                script {
+                    def lastTag = sh(script: 'git describe --tags --abbrev=0 origin/master', returnStdout: true).trim()
+                    // Construir la imagen Docker con el tag obtenido
+                    sh "docker build -t web_app:${lastTag} ."
+                }
             }
         }
 
-        stage('Test') {
+        stage('Iniciar sesión en la registry') {
             steps {
-                // Aquí puedes agregar los pasos para ejecutar tus pruebas
+                // Iniciar sesión en la registry
+                withCredentials([usernamePassword(credentialsId: 'registry-credentials', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                    sh 'docker login registry-url -u $USERNAME -p $PASSWORD'
+                }
             }
         }
 
-        stage('Deploy') {
+        stage('Etiquetar imagen Docker') {
             steps {
-                // Iniciar sesión en el registro de Docker
-                sh 'docker login www.registry-tableros.rafam.ec.gba.gov.ar -u <USUARIO> -p <CONTRASEÑA>'
+                script {
+                    def lastTag = sh(script: 'git describe --tags --abbrev=0', returnStdout: true).trim()
+                    sh "docker tag web_app:${lastTag} registry-url/web_app:${lastTag}"
+                }
+            }
+        }
 
+        stage('Subir imagen Docker a Registry') {
+            steps {
                 // Subir la imagen Docker con el tag obtenido
-                sh "docker push rafam_tablero_front:${lastTag}"
+                script {
+                    def lastTag = sh(script: 'git describe --tags --abbrev=0 origin/master', returnStdout: true).trim()
+                    sh "docker push registry-url/web_app:${lastTag}"
+                }
+            }
+        }
 
-                // Aquí puedes agregar los comandos para ejecutar tu aplicación con la nueva imagen
+        stage('Deploy - Desplegar imagen Docker') {
+            steps {
+                // Obtener el último tag liberado
+                script {
+                    def lastTag = sh(script: 'git describe --tags --abbrev=0', returnStdout: true).trim()
+                    // Detener y eliminar el contenedor existente (si lo hay)
+                    sh "docker stop web_app || true"
+                    sh "docker rm web_app || true"
+                    // Descargar la última imagen Docker desde la registry
+                    sh "docker pull registry-url/web_app:${lastTag}"
+                    // Iniciar un nuevo contenedor con la nueva imagen
+                    sh "docker run -d -p 5001:80 --env-file /directory/env/.env --name web_app web_app:${lastTag}"
+                }
             }
         }
     }

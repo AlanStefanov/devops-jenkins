@@ -10,7 +10,7 @@ pipeline {
                         doGenerateSubmoduleConfigurations: false, 
                         extensions: [], 
                         submoduleCfg: [], 
-                        userRemoteConfigs: [[credentialsId: 'git-rafam', url: 'https://www.git.rafam.ec.gba.gov.ar/rafam-2/rafam_tablero_front.git']]])
+                        userRemoteConfigs: [[credentialsId: 'git-x', url: 'repository-url']]])
             }
         }
 
@@ -18,7 +18,7 @@ pipeline {
             steps {
                 // Construir la imagen Docker
                 sh 'cp .env.example .env'
-                sh 'docker build -t rafam_tablero_front:v1.9.1-dev .'
+                sh 'docker build -t web_app:v1.9.1-dev .'
             }
         }
 
@@ -26,7 +26,7 @@ pipeline {
             steps {
                 // Iniciar sesión en la registry
                 withCredentials([usernamePassword(credentialsId: 'registry-credentials', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                    sh 'docker login www.registry-tableros.rafam.ec.gba.gov.ar -u $USERNAME -p $PASSWORD'
+                    sh 'docker login registry-url -u $USERNAME -p $PASSWORD'
                 }
             }
         }
@@ -34,27 +34,27 @@ pipeline {
         stage('Etiquetar imagen Docker') {
             steps {
                 // Etiquetar la imagen Docker
-                sh 'docker tag rafam_tablero_front:v1.9.1-dev www.registry-tableros.rafam.ec.gba.gov.ar/rafam_tablero_front:v1.9.1-dev'
+                sh 'docker tag web_app:v1.9.1-dev registry-url/web_app:v1.9.1-dev'
             }
         }
 
         stage('Subir imagen Docker a la registry') {
             steps {
                 // Subir la imagen Docker a la registry
-                sh 'docker push www.registry-tableros.rafam.ec.gba.gov.ar/rafam_tablero_front:v1.9.1-dev'
+                sh 'docker push registry-url/web_app:v1.9.1-dev'
             }
         }
 
         stage('Desplegar imagen Docker en servidor') {
             steps {
                 // Pull de la imagen Docker en el servidor
-                sh "docker pull www.registry-tableros.rafam.ec.gba.gov.ar/rafam_tablero_front:v1.9.1-dev"
+                sh "docker pull registry-rl/web_app:v1.9.1-dev"
 
                 // Detener y eliminar contenedores existentes
-                sh "docker stop rafam_tablero_front_ci_cd || true && docker rm rafam_tablero_front_ci_cd || true"
+                sh "docker stop web_app || true && docker rm web_app || true"
 
                 // Ejecutar contenedor con la nueva imagen
-                sh "docker run -it -dp 5001:80 --env-file /home/tmu/ci_cd/env/.env.front --name rafam_tablero_front_ci_cd rafam_tablero_front:v1.9.1-dev"
+                sh "docker run -it -dp 5001:80 --env-file /directory/.env --name web_app web_app:v1.9.1-dev"
                 
             }
         }
